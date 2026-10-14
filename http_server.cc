@@ -18,7 +18,7 @@ int main()
     searcher.InitSearcher(input);
 
     svr.Get("/s", [&searcher](const httplib::Request &req, httplib::Response &rsp)
-            {   if(req.has_param("word")){
+            {   if(!req.has_param("word")){
                 rsp.status = 400;
                 rsp.set_content("missing word parameter", "text/plain");
                 return;

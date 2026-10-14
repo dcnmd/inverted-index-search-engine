@@ -9,6 +9,13 @@
 namespace ns_search
 {
     
+    struct IntervedElem
+    {
+        uint16_t doc_id;
+        int weight;
+        std::string 
+    };
+
 class Searcher {
     private:
     ns_index::index* _index;
@@ -26,6 +33,8 @@ public:
         std::vector<std::string> words;
         NsUtil::jiebautil::cutstring(query, &words);
         ns_index::index::IndexInfolist inverted_list_all;
+  
+
         for (auto &word : words)
         {
             boost::to_lower(word);
