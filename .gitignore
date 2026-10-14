@@ -1,0 +1,8 @@
+/debug
+/http_server
+/parser
+/test
+/data/input/
+/data/output.txt
+/data/pow_html/output.txt
+/data/pow_html/parser

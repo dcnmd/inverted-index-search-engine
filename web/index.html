@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f7f8fa">
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <title>Boost 文档搜索</title>
+    <style>
+        :root {
+            color-scheme: light;
+            font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI",
+                "Noto Sans SC", "Microsoft YaHei", sans-serif;
+            color: #20242c;
+            background: #f7f8fa;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: clamp(48px, 10vh, 96px) 20px 48px;
+        }
+
+        main {
+            width: min(100%, 820px);
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .eyebrow {
+            margin: 0 0 18px;
+            color: #5367d8;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: clamp(32px, 7vw, 48px);
+            letter-spacing: -.04em;
+        }
+
+        .intro {
+            margin: 16px 0 34px;
+            color: #697386;
+            font-size: 16px;
+            line-height: 1.7;
+        }
+
+        form {
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            border: 0;
+            background: transparent;
+            box-shadow: none;
+        }
+
+        .search {
+            display: flex;
+            gap: 10px;
+            padding: 8px;
+            border: 1px solid #e3e6ed;
+            border-radius: 16px;
+            background: #fff;
+            box-shadow: 0 12px 36px rgb(31 41 55 / 8%);
+        }
+
+        input[type="search"] {
+            min-width: 0;
+            flex: 1;
+            padding: 14px 16px;
+            border: 0;
+            outline: 0;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            font-size: 16px;
+        }
+
+        input[type="search"]:focus {
+            outline: none;
+        }
+
+        input[type="search"]::placeholder {
+            color: #9aa2b1;
+        }
+
+        input[type="search"]:focus-visible {
+            outline: 2px solid #5367d8;
+            outline-offset: 2px;
+            border-radius: 8px;
+        }
+
+        button {
+            flex: 0 0 auto;
+            min-height: 48px;
+            padding: 0 26px;
+            border: 0;
+            border-radius: 11px;
+            background: #5367d8;
+            color: #fff;
+            font: inherit;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #4357c7;
+        }
+
+        button:focus-visible {
+            outline: 3px solid #aab5ff;
+            outline-offset: 3px;
+        }
+
+        .hint {
+            margin: 16px 0 0;
+            color: #8992a2;
+            font-size: 13px;
+        }
+
+        .restul {
+            display: grid;
+            gap: 14px;
+            margin-top: 28px;
+            text-align: left;
+        }
+
+        .restul>div {
+            padding: 20px 22px;
+            border: 1px solid #e6e9ef;
+            border-radius: 14px;
+            background: #fff;
+            box-shadow: 0 4px 14px rgb(31 41 55 / 4%);
+        }
+
+        .restul a {
+            color: #344bb8;
+            font-size: 18px;
+            font-weight: 650;
+            line-height: 1.5;
+            text-decoration: none;
+        }
+
+        .restul a:hover {
+            text-decoration: underline;
+        }
+
+        .restul p {
+            margin: 10px 0;
+            color: #535d6d;
+            font-size: 14px;
+            line-height: 1.8;
+            overflow-wrap: anywhere;
+        }
+
+        .restul i {
+            color: #31805b;
+            font-size: 12px;
+            font-style: normal;
+            overflow-wrap: anywhere;
+        }
+
+        footer {
+            margin-top: 72px;
+            color: #a0a7b4;
+            font-size: 12px;
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 48px 16px 32px;
+            }
+
+            .intro {
+                margin-bottom: 26px;
+                font-size: 15px;
+            }
+
+            .search {
+                gap: 4px;
+                padding: 6px;
+            }
+
+            input[type="search"] {
+                padding: 12px 10px;
+                font-size: 15px;
+            }
+
+            button {
+                min-height: 44px;
+                padding: 0 16px;
+            }
+
+            .restul {
+                gap: 10px;
+                margin-top: 22px;
+            }
+
+            .restul>div {
+                padding: 16px;
+            }
+
+            .restul a {
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main>
+        <p class="eyebrow">Boost Documentation</p>
+        <h1>搜索 Boost 文档</h1>
+        <p class="intro">输入关键词，快速查找 Boost 库文档中的相关内容。</p>
+
+        <form class="search" onsubmit="search(event)">
+            <input type="search" name="word" placeholder="例如：filesystem、asio" aria-label="搜索关键词" required>
+            <button type="submit">搜索</button>
+        </form>
+
+        <div class="restul"></div>
+
+        <p class="hint">搜索结果显示在下方。</p>
+        <footer>Boost 文档搜索</footer>
+    </main>
+    <script>
+        function search(e) {
+            e.preventDefault();
+            const query = $(".search input[name='word']").val().trim();
+            $.ajax({
+                type: "GET",
+                url: "/s",
+        data: { word: query },
+        dataType: "json",
+                success: function (data) {
+                    console.log(data);
+                    BuildHtml(data);
+                }
+            });
+            function BuildHtml(data) {
+                let restul_lable = $(".restul");
+                restul_lable.empty();
+                for (let elem of data) {
+                    const div_lable = $("<div>");
+                    let a_lable = $("<a>", {
+                        text: elem.title,
+                        href: elem.url,
+                        // 跳转到新的页面
+                        target: "_blank"
+                    });
+                    let p_lable = $("<p>", {
+                        text: elem.content
+                    });
+                    let i_lable = $("<i>", {
+                        text: elem.url
+                    });
+
+                    a_lable.appendTo(div_lable);
+                    p_lable.appendTo(div_lable);
+                    i_lable.appendTo(div_lable);
+                    div_lable.appendTo(restul_lable);
+                }
+            }
+
+        }
+    </script>
+</body>
+
+</html>
