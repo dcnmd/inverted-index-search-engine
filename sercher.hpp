@@ -5,13 +5,14 @@
 #include "Ns_Util.hpp"
 #include <jsoncpp/json/json.h>
 #include <algorithm>
+#include <cmath>
 
 namespace ns_search
 {
     struct IntervedElemPrint
     {
         uint16_t doc_id = 0;
-        int weight = 0;
+        double score = 0.0;
         std::string words;
     };
 
@@ -34,23 +35,46 @@ namespace ns_search
             std::vector<std::string> words;
             NsUtil::jiebautil::cutstring(query, &words);
 
+            const double k1 = 1.2;
+            const double b = 0.75;
+            const double TITLE_BOOST = 3.0;
+            const double N = static_cast<double>(_index->GetDocCount());
+            const double avgdl = _index->GetAvgDocLen();
+
             std::unordered_map<uint16_t, IntervedElemPrint> token_map;
             for (const auto &word : words)
             {
                 std::string lower_word = word;
                 boost::to_lower(lower_word);
                 ns_index::index::IndexInfolist *inverted_list = _index->GetInvertedList(lower_word);
-                if (inverted_list == nullptr)
+                if (inverted_list == nullptr || inverted_list->empty())
                 {
-                    std::cerr << "word: " << lower_word << " not found in inverted index" << std::endl;
                     continue;
                 }
 
+                const double df = static_cast<double>(inverted_list->size());
+                const double idf = std::log(1.0 + (N - df + 0.5) / (df + 0.5));
+
                 for (const auto &elem : *inverted_list)
                 {
+                    ns_index::DocInfo *doc_info = _index->GetForwardIndex(elem.doc_id);
+                    if (doc_info == nullptr)
+                    {
+                        continue;
+                    }
+
+                    const double tf = static_cast<double>(elem.tf);
+                    const double dl = static_cast<double>(doc_info->doc_len);
+                    const double norm = (avgdl > 0.0) ? (dl / avgdl) : 1.0;
+                    const double denom = tf + k1 * (1.0 - b + b * norm);
+                    const double body = (denom > 0.0)
+                                            ? idf * (tf * (k1 + 1.0)) / denom
+                                            : 0.0;
+                    const double title_bonus = (elem.title_tf > 0) ? idf * TITLE_BOOST : 0.0;
+
                     auto &item = token_map[elem.doc_id];
                     item.doc_id = elem.doc_id;
-                    item.weight += elem.weight;
+                    item.score += body + title_bonus;
                     if (!item.words.empty())
                     {
                         item.words += " ";
@@ -67,7 +91,11 @@ namespace ns_search
 
             std::sort(result_items.begin(), result_items.end(),
                       [](const IntervedElemPrint &a, const IntervedElemPrint &b) {
-                          return a.weight > b.weight;
+                          if (a.score != b.score)
+                          {
+                              return a.score > b.score;
+                          }
+                          return a.doc_id < b.doc_id;
                       });
 
             Json::Value root(Json::arrayValue);

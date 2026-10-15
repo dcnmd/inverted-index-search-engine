@@ -1,3 +1,4 @@
 {
-    "makefile.configureOnOpen": false
+    "makefile.configureOnOpen": false,
+    "cmake.sourceDirectory": "/home/ubuntu/boost_scarch/cppjieba"
 }

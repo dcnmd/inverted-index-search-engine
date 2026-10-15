@@ -4,6 +4,8 @@
 #include <iostream>
 #include <unordered_map>
 #include <fstream>
+#include <cstdint>
+#include <cstddef>
 #include "Ns_Util.hpp"
 #include <mutex>
 
@@ -16,12 +18,14 @@ namespace ns_index
         std::string content;
         std::string url;
         uint16_t doc_id;
+        uint32_t doc_len = 0;
     };
     struct IntervedElem
     {
         uint16_t doc_id;
         std::string word;
-        int weight;
+        uint32_t tf = 0;
+        uint32_t title_tf = 0;
     };
 
     class index
@@ -33,6 +37,8 @@ namespace ns_index
     private:
         std::vector<DocInfo> forward_index;
         IndexMap inverted_index;
+        double avg_doc_len = 0.0;
+        size_t total_doc_len = 0;
 private:
         index() {}
         index(const index &) = delete;
@@ -64,6 +70,9 @@ private:
             }
             return &forward_index[doc_id];
         }
+        size_t GetDocCount() const { return forward_index.size(); }
+        double GetAvgDocLen() const { return avg_doc_len; }
+
         IndexInfolist *GetInvertedList (const std::string &word)
         {
             auto it = inverted_index.find(word);
@@ -92,6 +101,11 @@ private:
 }
                 BuildInvertedIndex(doc_info);
             }
+            if (!forward_index.empty())
+            {
+                avg_doc_len = static_cast<double>(total_doc_len) /
+                              static_cast<double>(forward_index.size());
+            }
             return true;
         }
 
@@ -118,8 +132,8 @@ private:
         {
             struct word_cnt
             {
-                int title_cnt;
-                int content_cnt;
+                uint32_t title_cnt = 0;
+                uint32_t content_cnt = 0;
             };
             std::unordered_map<std::string, word_cnt> word_map;
             std::vector<std::string> title_words;
@@ -136,14 +150,17 @@ private:
                 boost::to_lower(word);
                 word_map[word].content_cnt++;   
             }
-#define X 10
-#define Y 1
+
+            doc_info->doc_len = static_cast<uint32_t>(content_words.size());
+            total_doc_len += doc_info->doc_len;
+
             for(const auto &word_pair : word_map)
             {
                 IntervedElem elem;
                 elem.doc_id = doc_info->doc_id;
                 elem.word = word_pair.first;
-                elem.weight = word_pair.second.title_cnt * X + word_pair.second.content_cnt * Y;
+                elem.tf = word_pair.second.content_cnt;
+                elem.title_tf = word_pair.second.title_cnt;
                 IndexInfolist &indexinfolist= inverted_index[word_pair.first];
                 indexinfolist.push_back(elem);
             }
