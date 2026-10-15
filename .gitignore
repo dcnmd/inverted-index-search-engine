@@ -6,3 +6,7 @@
 /data/output.txt
 /data/pow_html/output.txt
 /data/pow_html/parser
+/dict/
+*.o
+*.a
+*.so

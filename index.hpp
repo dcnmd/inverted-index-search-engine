@@ -55,7 +55,7 @@ private:
             }
             return instance;
         }
-        DocInfo *GetForwwardIndex(const uint16_t doc_id)
+        DocInfo *GetForwardIndex(const uint16_t doc_id)
         {
             if (doc_id >= forward_index.size())
             {

@@ -102,7 +102,11 @@ bool Parseurl(const std::string file, std::string *url)
         return false;
     std::string url_head = "https://www.boost.org/doc/libs/1_74_0/doc/html/";
     std::string url_tail = file.substr(scr_path.size());
-    *url = url_head + "/" + url_tail;
+    if (!url_tail.empty() && url_tail[0] == '/')
+    {
+        url_tail.erase(0, 1);
+    }
+    *url = url_head + url_tail;
     return true;
 }
 // bool Parseurl(const std::string &file, std::string *url)
