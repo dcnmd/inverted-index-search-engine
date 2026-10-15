@@ -3,10 +3,11 @@
 基于 Boost 官方文档语料实现的 C++ 倒排索引搜索引擎。
 
 - **语料**：Boost 1.74 官方文档站，7546 个 HTML 页面
-- **解析**：手写状态机剥离 HTML 标签，`boost::filesystem` 还原每篇文档的原始 URL
-- **索引**：正排索引（文档元信息）+ 倒排索引（词 → 文档列表 + 权重）
+- **解析**：手写状态机逐字符剥离 HTML 标签，`boost::filesystem` 还原每篇文档的原始 URL
+- **索引**：正排索引（文档元信息 + 文档长度）+ 倒排索引（词 → 文档列表 + 词频）
 - **分词**：cppjieba，MP + HMM 混合模型
-- **检索**：分词 → 查倒排链 → 按权重排序 → 摘取正文摘要 → JSON 返回
+- **排序**：BM25（`k1 = 1.2`，`b = 0.75`），标题命中额外加权
+- **检索**：分词 → 查倒排链 → 按 `doc_id` 合并打分 → 摘取摘要 → JSON 返回
 - **服务**：cpp-httplib，提供 `/s?word=xxx` 检索接口
 
 ## 目录结构
@@ -15,11 +16,33 @@
 | --- | --- |
 | `parser.cc` | 遍历 HTML 语料，剥离标签，按 `\3` 分隔符落盘为 `data/pow_html/output.txt` |
 | `index.hpp` | 索引单例。正排 `std::vector<DocInfo>`，倒排 `std::unordered_map<std::string, IndexInfolist>` |
-| `sercher.hpp` | 检索逻辑：分词 → 拼倒排链 → 按权重排序 → `getdesc` 摘摘要 → 输出 JSON |
+| `sercher.hpp` | 检索逻辑：分词 → 按 `doc_id` 合并倒排链并累加 BM25 分数 → 排序 → `getdesc` 摘摘要 → 输出 JSON |
 | `Ns_Util.hpp` | 工具：文件读取、字符串切分、cppjieba 封装 |
 | `http_server.cc` | HTTP 服务入口，监听 8081 |
 | `debug.cc` | 命令行检索调试工具 |
 | `web/index.html` | 检索页面 |
+
+## 排序：BM25
+
+排序分数按查询词逐个累加：
+
+```
+score(d, q) = Σ_t IDF(t) · [ tf · (k1 + 1) / (tf + k1 · (1 - b + b · |d| / avgdl)) + title_boost(t, d) ]
+
+IDF(t)      = ln(1 + (N - df + 0.5) / (df + 0.5))
+title_boost = IDF(t) · 3.0     （t 出现在标题时）
+```
+
+- `tf`：词在**正文**中的出现次数；`df`：包含该词的文档数；`N`：文档总数
+- `|d|`：文档正文分词后的词数，在构建索引时由 `BuildInvertedIndex` 统计（`index.hpp` 的 `DocInfo::doc_len`），`avgdl` 为全部文档的平均长度
+- `k1 = 1.2`、`b = 0.75` 取 BM25 的常用默认值；`3.0` 是标题权重，属于经验值
+
+两点实现上的取舍：
+
+1. **文档长度归一化**让长文档不再因为词频天然偏高而占优。原先用的是 `weight = 标题命中数 × 10 + 正文命中数 × 1`，既没有长度归一化也没有 IDF。
+2. **标题加分是独立的加项，不是把标题词频并进 `tf`。** 如果把标题词频乘个系数加到 `tf` 上，那么只在标题出现、正文没出现的词 `tf` 为 0，整个 BM25 项会算成 0 分，标题命中的价值反而被抹掉。所以正文照常算 BM25，标题命中另外加一项 `IDF × 3.0`。
+
+`doc_id` 在全流程中使用 `uint16_t`。
 
 ## 构建与运行
 
@@ -35,29 +58,13 @@ git clone --recurse-submodules https://github.com/dcnmd/inverted-index-search-en
 git submodule update --init --recursive
 ```
 
-> `cpp-httplib` 和 `cppjieba` 是第三方依赖，用 submodule 固定在验证过的 commit 上，不在本仓库内重复存放。
+> `cpp-httplib` 和 `cppjieba` 是第三方依赖，用 submodule 固定在验证过的 commit 上，不在本仓库内重复存放。jieba 的词典随 `cppjieba` 一起拉下来，程序直接从 `cppjieba/dict/` 读取，不需要额外拷贝。
 
-### 2. 准备 jieba 词典
-
-程序启动时按 `dict/` 这个相对路径加载 5 个词典文件，所以需要先把词典拷到仓库根目录：
-
-```sh
-cp -r cppjieba/dict ./dict
-```
-
-对应 `http_server.cc` 里的：
-
-```cpp
-cppjieba::Jieba jieba("dict/jieba.dict.utf8", "dict/hmm_model.utf8",
-                      "dict/user.dict.utf8", "dict/idf.utf8",
-                      "dict/stop_words.utf8")
-```
-
-### 3. 准备语料
+### 2. 准备语料
 
 把 Boost 1.74 的 HTML 文档放进 `data/input/`。语料体积较大，不纳入版本控制。
 
-### 4. 编译运行
+### 3. 编译运行
 
 ```sh
 mkdir -p data/pow_html
@@ -92,7 +99,7 @@ sudo yum install gcc-c++ boost-devel jsoncpp-devel
 curl 'http://localhost:8081/s?word=boost'
 ```
 
-返回 JSON 数组，每项包含标题、正文摘要和原始 URL：
+返回 JSON 数组，按 BM25 分数降序，每项包含标题、正文摘要和原始 URL。同一篇文档命中多个查询词时只出现一次，分数累加，摘要在所有查询词中取最早出现的位置：
 
 ```json
 [
@@ -106,16 +113,25 @@ curl 'http://localhost:8081/s?word=boost'
 
 不带 `word` 参数的请求（`curl 'http://localhost:8081/s'`）返回 400 和 `missing word parameter`。
 
+## 已经修过的问题
+
+这些是实现完成之后复盘发现的，都已经修掉：
+
+- **多词查询重复召回**：`sercher.hpp` 原先把各查询词的倒排链直接拼接，同一文档命中多个词时会在结果里重复出现；排序也写在查询词循环内部，每个词都要全量重排一次。改为用 `std::unordered_map<uint16_t, ...>` 按 `doc_id` 合并、分数累加，排序移到循环外只做一次。
+- **排序用的权重是手工设定值**：`weight = 标题命中数 × 10 + 正文命中数 × 1`，没有 IDF，也没有文档长度归一化，长文档天然占优。已替换为 BM25。
+- **摘要只处理第一个命中词**：原先 `getdesc` 只接收一个词。改为接收该文档命中的全部查询词，在所有词里取最早出现的位置作为摘要中心。
+- **HTTP 接口的参数判断条件写反**：`http_server.cc` 里原本是 `if (req.has_param("word"))` 就返回 400，导致带 `word` 参数的正常请求反而报错。已改为 `if (!req.has_param("word"))`。
+- **索引中没有文档长度信息**：为 BM25 的长度归一化补上了 `DocInfo::doc_len` 和全局的 `avg_doc_len`。
+
 ## 已知问题与后续改进
 
-这部分是我在实现之后复盘出来的短板，按优先级排列：
+按优先级排列：
 
-- **多词查询未按文档去重**：`sercher.hpp` 把各查询词的倒排链直接拼接，同一文档命中多个词时会重复出现在结果里；排序也写在循环内部重复执行。计划改为按 `doc_id` 合并并累加权重，排序移到循环外只做一次。
-- **权重是手工设定值**：`weight = 标题命中数 × 10 + 正文命中数 × 1`，这两个系数是经验值，没有文档长度归一化，也没有 IDF，因此长文档天然占优。计划替换为 BM25。
-- **倒排链是线性扫描**：多词查询没有做求交或跳表优化，文档量继续增长会成为瓶颈。
+- **倒排链是线性扫描**：多词查询把每个词的倒排链完整遍历一遍，没有做求交或跳表优化。文档量继续增长会成为瓶颈。
 - **`doc_id` 使用 `uint16_t`**：上限 65535，当前 7546 篇文档安全，但应该换成 `uint32_t`。
 - **索引未序列化**：每次启动都要重新解析并分词构建索引，没有把构建好的倒排索引落盘，启动耗时长。
+- **单例的初始化不是线程安全的**：`index.hpp` 的 `get_instance()` 用的是双重检查锁，但 `instance` 是普通指针而非 `std::atomic`，且 `std::mutex` 没有用 RAII 保护（加锁后若抛异常不会解锁）。可以在构造函数里提前初始化，或者换成 C++11 的局部静态变量写法，由编译器保证线程安全。
 
 ## 说明
 
-原始 HTML 语料、jieba 词典和编译产物不纳入版本控制，见 `.gitignore`。
+原始 HTML 语料、编译产物不纳入版本控制，见 `.gitignore`。
