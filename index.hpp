@@ -96,9 +96,9 @@ private:
             {
                 DocInfo *doc_info = BuildForwardIndex(line);
                 if (doc_info == nullptr)
-{
-    continue;
-}
+                {
+                        continue;
+                    }
                 BuildInvertedIndex(doc_info);
             }
             if (!forward_index.empty())

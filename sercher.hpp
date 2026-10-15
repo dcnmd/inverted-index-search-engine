@@ -6,6 +6,7 @@
 #include <jsoncpp/json/json.h>
 #include <algorithm>
 #include <cmath>
+#include <sstream>
 
 namespace ns_search
 {
@@ -108,19 +109,9 @@ namespace ns_search
                     continue;
                 }
 
-                std::string target_word = item.words;
-                if (!target_word.empty())
-                {
-                    const auto pos = target_word.find(' ');
-                    if (pos != std::string::npos)
-                    {
-                        target_word = target_word.substr(0, pos);
-                    }
-                }
-
                 Json::Value element;
                 element["title"] = doc_info->title;
-                element["content"] = getdesc(doc_info->content, target_word);
+                element["content"] = getdesc(doc_info->content, item.words);
                 element["url"] = doc_info->url;
                 root.append(element);
             }
@@ -130,37 +121,31 @@ namespace ns_search
             *jison_string = Json::writeString(writer, root);
         }
 
-        std::string getdesc(const std::string &html_content, const std::string &word)
+        std::string getdesc(const std::string &html_content, const std::string &words)
         {
-            if (word.empty())
+            std::istringstream word_stream(words);
+            std::string word;
+            size_t first_match_pos = std::string::npos;
+            while (word_stream >> word)
+            {
+                auto it = std::search(html_content.begin(), html_content.end(),
+                                      word.begin(), word.end(),
+                                      [](unsigned char x, unsigned char y) {
+                                          return std::tolower(x) == std::tolower(y);
+                                      });
+                if (it != html_content.end())
+                {
+                    const size_t match_pos = std::distance(html_content.begin(), it);
+                    first_match_pos = std::min(first_match_pos, match_pos);
+                }
+            }
+            if (first_match_pos == std::string::npos)
             {
                 return "";
             }
 
-            int prev_pos = 50;
-            int next_pos = 100;
-            auto it = std::search(html_content.begin(), html_content.end(),
-                                  word.begin(), word.end(),
-                                  [](unsigned char x, unsigned char y) {
-                                      return std::tolower(x) == std::tolower(y);
-                                  });
-            if (it == html_content.end())
-            {
-                return "";
-            }
-
-            const int word_pos = std::distance(html_content.begin(), it);
-            int start = 0;
-            int end = static_cast<int>(html_content.size());
-            if (word_pos - prev_pos > start)
-            {
-                start = word_pos - prev_pos;
-            }
-            if (word_pos + next_pos < end)
-            {
-                end = word_pos + next_pos;
-            }
-
+            const size_t start = (first_match_pos > 50) ? first_match_pos - 50 : 0;
+            const size_t end = std::min(html_content.size(), first_match_pos + 100);
             return html_content.substr(start, end - start);
         }
     };
