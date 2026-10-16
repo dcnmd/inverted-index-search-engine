@@ -98,10 +98,13 @@ namespace ns_search
                           }
                           return a.doc_id < b.doc_id;
                       });
+            const size_t MAX_RESULTS = 50;
+            const size_t limit = std::min(MAX_RESULTS, result_items.size());
 
             Json::Value root(Json::arrayValue);
-            for (auto &item : result_items)
+                for (size_t i = 0; i < limit; ++i)
             {
+                auto &item = result_items[i];
                 ns_index::DocInfo *doc_info = _index->GetForwardIndex(item.doc_id);
                 if (doc_info == nullptr)
                 {
