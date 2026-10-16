@@ -6,11 +6,11 @@ CXX=g++
 .PHONY:all
 all:$(parser) $(DUG) $(HTTP_SERVER)
 $(parser):parser.cc
-	$(CXX) -o $@ $^ -std=c++11 -Icppjieba/include -lboost_system -lboost_filesystem -O2
+	$(CXX) -o $@ $^ -std=c++11 -Icppjieba/include -lboost_system -lboost_filesystem -O2 -Wall
 $(DUG):debug.cc
-	$(CXX) -o $@ $^ -std=c++11 -Icppjieba/include -ljsoncpp -O2
+	$(CXX) -o $@ $^ -std=c++11 -Icppjieba/include -ljsoncpp -O2 -Wall
 $(HTTP_SERVER):http_server.cc
-	$(CXX) -o $@ $^ -std=c++11 -Icppjieba/include -ljsoncpp -lpthread -O2
+	$(CXX) -o $@ $^ -std=c++11 -Icppjieba/include -ljsoncpp -lpthread -O2 -Wall
 .PHONY:clean
 clean:
 	rm -f $(parser)
