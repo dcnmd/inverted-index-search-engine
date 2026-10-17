@@ -230,8 +230,7 @@ private:
                 pending.erase(0, static_cast<size_t>(count));
                 continue;
             }
-            if (count =
-                = 0) {
+            if (count == 0) {
                 break;
             }
 
