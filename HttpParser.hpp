@@ -200,7 +200,7 @@ public:
             std::string key;
             std::string value;
             if (!urlDecode(raw_key, key) || !urlDecode(raw_value, value)) {
-                return false;ases
+                return false;
             }
             if (!key.empty()) params[key] = value;
             pos = ampersand + 1;
