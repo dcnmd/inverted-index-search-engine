@@ -9,6 +9,7 @@
 - **排序**：BM25（`k1 = 1.2`，`b = 0.75`），标题命中额外加权
 - **检索**：分词 → 查倒排链 → 按 `doc_id` 合并打分 → 摘取摘要 → JSON 返回
 - **服务**：cpp-httplib，提供 `/s?word=xxx` 检索接口
+- **网络练习**：`epoll_echo` 是独立的单线程 epoll ET HTTP/1.1 服务，阶段二实现增量解析、keep-alive、pipelining 和非阻塞输出缓冲；检索逻辑暂以固定 JSON 占位
 
 ## 目录结构
 
@@ -21,6 +22,10 @@
 | `http_server.cc` | HTTP 服务入口，监听 8081 |
 | `debug.cc` | 命令行检索调试工具 |
 | `web/index.html` | 检索页面 |
+| `epoll_echo.cc` | 自研 epoll HTTP 服务入口，监听 8082 |
+| `CommandServer.hpp` | epoll 事件循环、连接状态管理和请求路由 |
+| `HttpParser.hpp` | HTTP 请求行、请求头、URL 查询参数解析及 JSON 转义 |
+| `TcpSocket.hpp` | TCP socket 创建、accept、收发和 fd 生命周期管理 |
 
 ## 排序：BM25
 
@@ -72,6 +77,16 @@ make
 ./parser        # 解析 data/input/ 下的 HTML，产出 data/pow_html/output.txt
 ./http_server   # 加载上一步的索引，监听 8081
 ```
+
+自写 epoll HTTP 服务可单独编译运行（不依赖索引文件）：
+
+```sh
+make epoll_echo
+./epoll_echo    # 监听 8082，可访问 / 或 /s?word=boost
+python3 http_server_test.py
+```
+
+`epoll_echo` 当前只验证 HTTP 协议与网络收发，返回固定 JSON；它尚未接入搜索索引。
 
 ## 依赖
 

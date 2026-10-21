@@ -10,3 +10,5 @@
 *.o
 *.a
 *.so
+/epoll_echo
+*.gch
