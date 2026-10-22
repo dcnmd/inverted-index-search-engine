@@ -78,15 +78,15 @@ make
 ./http_server   # 加载上一步的索引，监听 8081
 ```
 
-自写 epoll HTTP 服务可单独编译运行（不依赖索引文件）：
+自写 epoll HTTP 服务会在启动时加载同一份索引，并通过 `/s?word=...` 调用 BM25 搜索：
 
 ```sh
 make epoll_echo
-./epoll_echo    # 监听 8082，可访问 / 或 /s?word=boost
-python3 http_server_test.py
+./epoll_echo    # 从仓库根目录启动，监听 8082
+curl 'http://localhost:8082/s?word=boost'
+python3 http_server_test.py  # H1-H10 与 P1-P5
+./verify_phase3.sh           # 与 8081 cpp-httplib 基线逐项比较
 ```
-
-`epoll_echo` 当前只验证 HTTP 协议与网络收发，返回固定 JSON；它尚未接入搜索索引。
 
 ## 依赖
 

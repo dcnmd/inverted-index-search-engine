@@ -1,16 +1,28 @@
-// epoll_echo.cc —— 阶段 1：单线程 epoll(ET) + 非阻塞 IO 的 echo server
+// epoll_echo.cc —— 阶段 3：单线程 epoll(ET) + BM25 HTTP/1.1 server
 //
-// 编译：g++ -std=c++11 -O2 -Wall -o epoll_echo epoll_echo.cc
-// 运行：./epoll_echo [port]          （默认 8082）
-//
-// 已知缺陷（阶段 2 来修）：非阻塞 send 部分写后尚无 EPOLLOUT 写缓冲。
+// 编译：make epoll_echo
+// 运行：./epoll_echo [port]          （在仓库根目录运行，默认 8082）
 
 #include "CommandServer.hpp"
+#include "Ns_Util.hpp"
+#include "sercher.hpp"
 
 #include <csignal>
 #include <cstdlib>
 #include <exception>
 #include <iostream>
+#include <string>
+
+cppjieba::Jieba NsUtil::jiebautil::jieba(
+    "cppjieba/dict/jieba.dict.utf8",
+    "cppjieba/dict/hmm_model.utf8",
+    "cppjieba/dict/user.dict.utf8",
+    "cppjieba/dict/idf.utf8",
+    "cppjieba/dict/stop_words.utf8");
+
+namespace {
+const char* const kIndexInput = "data/pow_html/output.txt";
+}  // namespace
 
 int main(int argc, char** argv) {
     int port = 8082;
@@ -30,7 +42,15 @@ int main(int argc, char** argv) {
     }
 
     try {
-        CommandServer server(port);
+        std::cerr << "[init] building index from " << kIndexInput << " ...\n";
+        ns_search::Searcher searcher;
+        searcher.InitSearcher(kIndexInput);
+
+        CommandServer server(port, [&searcher](const std::string& word) {
+            std::string json;
+            searcher.Search(word, &json);
+            return json;
+        });
         server.run();
     } catch (const std::exception& error) {
         std::cerr << "[fatal] " << error.what() << '\n';

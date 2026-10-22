@@ -10,6 +10,7 @@
 #include <cerrno>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -60,7 +61,10 @@ inline void reportSystemError(const char* operation, int error) {
 
 class CommandServer {
 public:
-    explicit CommandServer(int port) {
+    typedef std::function<std::string(const std::string& word)> SearchHandler;
+
+    explicit CommandServer(int port, SearchHandler search_handler = SearchHandler())
+        : search_handler_(std::move(search_handler)) {
         try {
             listener_ = TcpSocket::listenOn(port, kBacklog);
             port_ = port;
@@ -122,6 +126,7 @@ private:
     TcpSocket listener_;
     int epoll_fd_ = -1;
     std::unordered_map<int, Connection> conns_;
+    SearchHandler search_handler_;
 
     static uint64_t makeEventTag(EventKind kind, int fd) {
         return (static_cast<uint64_t>(kind) << 32) |
@@ -189,6 +194,7 @@ private:
                               const std::string& body,
                               bool close,
                               const std::string& extra_headers = std::string()) {
+        const bool persistent = !close && status < 400;
         std::string response;
         response.reserve(body.size() + extra_headers.size() + 160);
         response += "HTTP/1.1 ";
@@ -199,8 +205,11 @@ private:
         response += content_type;
         response += "\r\nContent-Length: ";
         response += std::to_string(body.size());
-        response += "\r\nConnection: ";
-        response += close ? "close" : "keep-alive";
+        if (persistent) {
+            response += "\r\nKeep-Alive: timeout=5, max=100";
+        } else {
+            response += "\r\nConnection: close";
+        }
         response += "\r\n";
         response += extra_headers;
         response += "\r\n";
@@ -210,6 +219,7 @@ private:
     //查看请求和不合规,生成对应响应
     std::string routeRequest(const http_protocol::Request& request, bool& close) {
         if (request.method != "GET") {
+            close = true;
             return buildResponse(405, "Method Not Allowed",
                                  "text/plain; charset=utf-8",
                                  "only GET supported\n", close,
@@ -233,7 +243,25 @@ private:
         }
 #endif
 
-        if (path != "/" && path != "/s") {
+        if (path == "/s") {
+            const std::unordered_map<std::string, std::string>::const_iterator word =
+                params.find("word");
+            if (word == params.end()) {
+                close = true;
+                return buildResponse(400, "Bad Request", "text/plain",
+                                     "missing word parameter", close);
+            }
+            if (!search_handler_) {
+                close = true;
+                return buildResponse(503, "Service Unavailable", "text/plain",
+                                     "search backend not configured", close);
+            }
+            return buildResponse(200, "OK", "application/json; charset=utf-8",
+                                 search_handler_(word->second), close);
+        }
+
+        if (path != "/") {
+            close = true;
             return buildResponse(404, "Not Found", "text/plain; charset=utf-8",
                                  "not found\n", close);
         }
