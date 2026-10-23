@@ -51,6 +51,8 @@ public:
     size_t connectionCount() const { return conn_count_.load(); }
 
 private:
+    static void reportSystemError(const char* operation, int error);
+
     void loop();
     void wakeUp();
     void drainWakeup();

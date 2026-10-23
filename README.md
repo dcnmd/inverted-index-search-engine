@@ -24,7 +24,9 @@
 | `web/index.html` | 检索页面 |
 | `epoll_echo.cc` | 自研 epoll HTTP 服务入口，监听 8082 |
 | `CommandServer.hpp` / `CommandServer.cc` | main reactor：监听、accept、round-robin 分发到 sub reactor |
-| `Reactor.hpp` / `Reactor.cc` | sub reactor：每个线程一个 epoll，负责连接的读写、定时器、结果回投 |
+| `Reactor.hpp` / `Reactor.cc` | sub reactor 主体：生命周期、跨线程队列、事件循环、定时器 |
+| `ReactorIo.hpp` | 单连接 IO：读、写、flush、事件注册、关闭连接 |
+| `HttpPipeline.hpp` | 请求流水线：解析 → 路由 → 派活给业务池 → 结果回写 |
 | `Connection.hpp` | 连接对象与超时/缓冲上限常量（响应头 `Keep-Alive` 与定时器共用） |
 | `BusinessPool.hpp` / `BusinessPool.cc` | 固定大小业务线程池，检索在这里跑 |
 | `HttpRouter.hpp` | HTTP 语义与事件循环解耦：状态码、响应拼接、路由判定 |

@@ -3,7 +3,7 @@ DUG=debug
 HTTP_SERVER=http_server
 EPOLL_ECHO=epoll_echo
 EPOLL_SRCS=epoll_echo.cc CommandServer.cc Reactor.cc BusinessPool.cc
-EPOLL_HEADERS=CommandServer.hpp Connection.hpp Reactor.hpp BusinessPool.hpp HttpRouter.hpp HttpParser.hpp TcpSocket.hpp sercher.hpp index.hpp Ns_Util.hpp
+EPOLL_HEADERS=CommandServer.hpp Connection.hpp Reactor.hpp ReactorIo.hpp HttpPipeline.hpp BusinessPool.hpp HttpRouter.hpp HttpParser.hpp TcpSocket.hpp sercher.hpp index.hpp Ns_Util.hpp
 HEADERS=index.hpp sercher.hpp Ns_Util.hpp
 
 CXX=g++
