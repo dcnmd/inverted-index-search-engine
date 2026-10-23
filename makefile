@@ -2,7 +2,8 @@ parser=parser
 DUG=debug
 HTTP_SERVER=http_server
 EPOLL_ECHO=epoll_echo
-EPOLL_HEADERS=CommandServer.hpp HttpParser.hpp TcpSocket.hpp sercher.hpp index.hpp Ns_Util.hpp
+EPOLL_SRCS=epoll_echo.cc CommandServer.cc Reactor.cc BusinessPool.cc
+EPOLL_HEADERS=CommandServer.hpp Connection.hpp Reactor.hpp BusinessPool.hpp HttpRouter.hpp HttpParser.hpp TcpSocket.hpp sercher.hpp index.hpp Ns_Util.hpp
 HEADERS=index.hpp sercher.hpp Ns_Util.hpp
 
 CXX=g++
@@ -14,8 +15,8 @@ $(DUG):debug.cc $(HEADERS)
 	$(CXX) -o $@ $< -std=c++11 -Icppjieba/include -ljsoncpp -O2 -Wall
 $(HTTP_SERVER):http_server.cc $(HEADERS)
 	$(CXX) -o $@ $< -std=c++11 -Icppjieba/include -ljsoncpp -lpthread -O2 -Wall
-$(EPOLL_ECHO):epoll_echo.cc $(EPOLL_HEADERS)
-	$(CXX) -o $@ $< -std=c++11 -Icppjieba/include -ljsoncpp -lpthread -O2 -Wall
+$(EPOLL_ECHO):$(EPOLL_SRCS) $(EPOLL_HEADERS)
+	$(CXX) -o $@ $(EPOLL_SRCS) -std=c++11 -Icppjieba/include -ljsoncpp -lpthread -pthread -O2 -Wall
 .PHONY:clean
 clean:
 	rm -f $(parser)

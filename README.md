@@ -9,7 +9,7 @@
 - **排序**：BM25（`k1 = 1.2`，`b = 0.75`），标题命中额外加权
 - **检索**：分词 → 查倒排链 → 按 `doc_id` 合并打分 → 摘取摘要 → JSON 返回
 - **服务**：cpp-httplib，提供 `/s?word=xxx` 检索接口
-- **网络练习**：`epoll_echo` 是独立的单线程 epoll ET HTTP/1.1 服务，阶段二实现增量解析、keep-alive、pipelining 和非阻塞输出缓冲；检索逻辑暂以固定 JSON 占位
+- **网络练习**：`epoll_echo` 是自研 epoll ET HTTP/1.1 服务，主从 Reactor（main 只 accept，2 个 sub reactor 管读写）+ 4 线程业务池，检索从 IO 线程移出，另有空闲连接回收
 
 ## 目录结构
 
@@ -23,9 +23,14 @@
 | `debug.cc` | 命令行检索调试工具 |
 | `web/index.html` | 检索页面 |
 | `epoll_echo.cc` | 自研 epoll HTTP 服务入口，监听 8082 |
-| `CommandServer.hpp` | epoll 事件循环、连接状态管理和请求路由 |
+| `CommandServer.hpp` / `CommandServer.cc` | main reactor：监听、accept、round-robin 分发到 sub reactor |
+| `Reactor.hpp` / `Reactor.cc` | sub reactor：每个线程一个 epoll，负责连接的读写、定时器、结果回投 |
+| `Connection.hpp` | 连接对象与超时/缓冲上限常量（响应头 `Keep-Alive` 与定时器共用） |
+| `BusinessPool.hpp` / `BusinessPool.cc` | 固定大小业务线程池，检索在这里跑 |
+| `HttpRouter.hpp` | HTTP 语义与事件循环解耦：状态码、响应拼接、路由判定 |
 | `HttpParser.hpp` | HTTP 请求行、请求头、URL 查询参数解析及 JSON 转义 |
-| `TcpSocket.hpp` | TCP socket 创建、accept、收发和 fd 生命周期管理 |
+| `TcpSocket.hpp` | TCP socket 创建、accept（含 EMFILE 兜底）、收发和 fd 生命周期管理 |
+| `mixed.lua` | wrk 脚本：混合快慢查询，用于测 P99 |
 
 ## 排序：BM25
 
@@ -129,6 +134,52 @@ curl 'http://localhost:8081/s?word=boost'
 不带 `word` 参数的请求（`curl 'http://localhost:8081/s'`）返回 400 和 `missing word parameter`。
 
 结果集上限为 50 条（`sercher.hpp` 中的 `MAX_RESULTS`）。`boost` 这类在语料中普遍出现的词会命中约 7500 篇文档，不加限制时单次响应可达 3 MB。
+
+## 网络层：从单线程 Reactor 到主从 Reactor
+
+单线程 Reactor 有两个硬伤：检索一旦跑几十毫秒，**这条线程上的所有连接都被卡住**；多核机器的第二个核完全用不上。
+
+改造后：
+
+```
+main reactor (thread 0)      listen fd(ET) → accept → round-robin 分发
+        │ handoff(conn) + eventfd 唤醒
+   ┌────┴─────┐
+sub reactor 0  sub reactor 1     各自一个 epoll、各自一条线程，只管 IO
+   └────┬─────┘
+        │ pool->submit(word)
+   BusinessPool(4 线程)  →  search()  →  postResult(conn_id, response)
+```
+
+四条约束（违反任一条都会偶发崩溃）：
+
+1. 一个连接从建立起就固定属于某个 sub reactor，读写只在该线程做 → 不需要锁
+2. 跨线程只传 `conn_id`（uint32），**绝不传 `Connection*`** → 免疫「连接已关闭」的竞态
+3. 业务线程里不碰 socket fd / epoll fd，只做检索 + 拼字符串
+4. 跨线程唤醒只用 eventfd，不用 `epoll_wait` 超时轮询（否则延迟退化到 500 ms）
+
+其他细节：
+
+- **定时器**：每 500 ms 线性扫描一遍连接表，回收空闲 5 秒的连接。连接数只有几百，扫描成本可忽略，所以没有上时间轮。
+- **`Keep-Alive: timeout=5, max=100` 现在是真的**：响应头与定时器共用 `Connection.hpp` 里的 `kIdleTimeoutSec` / `kMaxRequestsPerConn`。
+- **背压**：对端只发不读时未发数据超过 1 MB 就主动断开，避免 `outbuf` 涨到 OOM。
+- **EMFILE 兜底**：预留一个 fd，fd 用尽时先关它腾位、接受后立刻关闭再补回，不会让 accept 异常冒泡成进程退出。
+
+### 压测对比（指标是 P99，不是 QPS）
+
+只有 2 核，线程变多反而有上下文切换开销，**QPS 不变甚至略降是预期结果**。这次改造买到的是尾延迟：慢查询不再排在快请求前面。
+
+```sh
+wrk -t2 -c100 -d30s --latency -s mixed.lua 'http://127.0.0.1:8082/'
+```
+
+| 版本 | QPS | Avg | P90 | P99 | Max |
+| --- | --- | --- | --- | --- | --- |
+| 阶段 3 单线程 Reactor | 待测 | 待测 | 待测 | 待测 | 待测 |
+| 阶段 4 主从 + 业务线程池 | 待测 | 待测 | 待测 | 待测 | 待测 |
+| cpp-httplib（8081）对照 | 待测 | 待测 | 待测 | 待测 | 待测 |
+
+> 表格数字需在 Ubuntu 服务器上实测填入（本次改造只做了代码层面的实现，Windows 环境无法编译 epoll 相关代码）。
 
 ## 性能
 
