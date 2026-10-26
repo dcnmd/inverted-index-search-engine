@@ -36,7 +36,6 @@ inline std::string buildResponse(int status,
     response += "\r\nContent-Length: ";
     response += std::to_string(body.size());
     if (persistent) {
-        // 这个声明现在是真的：Reactor 的定时器按同一个 kIdleTimeoutSec 回收空闲连接
         response += "\r\nKeep-Alive: timeout=";
         response += std::to_string(kIdleTimeoutSec);
         response += ", max=";

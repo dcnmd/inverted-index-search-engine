@@ -11,9 +11,7 @@
 #include <memory>
 #include <vector>
 
-// 阶段 4 · main reactor：
 //   - 只监听 listen fd、accept 新连接、round-robin 分发给 sub reactor
-//   - 不读不写任何客户端数据，因此这里没有慢查询阻塞的可能
 class CommandServer {
 public:
     CommandServer(int port, size_t reactor_count, BusinessPool* pool,
